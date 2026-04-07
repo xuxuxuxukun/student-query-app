@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import os
 
 # 页面配置
 st.set_page_config(
@@ -9,36 +9,15 @@ st.set_page_config(
     layout="centered"
 )
 
-# 自定义CSS样式
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin-bottom: 1rem;
-    }
-    .success-message {
-        padding: 1rem;
-        background-color: #d4edda;
-        border-left: 4px solid #28a745;
-        border-radius: 5px;
-        margin-bottom: 1rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # 加载数据
 @st.cache_data
 def load_data():
+    # 获取当前文件所在目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(current_dir, 'data.xlsx')
+    
     try:
-        df = pd.read_excel('data.xlsx')
+        df = pd.read_excel(file_path)
         return df
     except Exception as e:
         st.error(f"数据加载失败：{e}")
@@ -47,155 +26,90 @@ def load_data():
 # 主应用
 def main():
     # 标题
-    st.markdown('<h1 class="main-header">📊 学生练习数据查询系统</h1>', unsafe_allow_html=True)
+    st.title("📊 学生练习数据查询系统")
     st.markdown("---")
     
     # 加载数据
     df = load_data()
     
     if df is None:
-        st.stop()
+        st.error("无法加载数据文件，请联系管理员")
+        return
     
-    # 查询输入区域
-    st.markdown("### 🔍 查询信息")
-    st.markdown("请输入您的手机号或学号进行查询")
-    
-    # 输入框
+    # 搜索框
+    st.markdown("### 🔍 请输入查询信息")
     search_input = st.text_input(
-        "手机号/学号",
-        placeholder="请输入11位手机号或学号",
-        max_chars=50,
-        help="输入您的手机号（11位数字）或学号即可查询"
+        "输入手机号或学号（用户ID）", 
+        placeholder="例如：13912345678 或 urs-phoneyd.xxx@163.com",
+        label_visibility="collapsed"
     )
     
-    # 查询按钮
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        search_button = st.button("🔍 查询", use_container_width=True, type="primary")
-    
-    # 执行查询
-    if search_button and search_input:
-        # 清理输入
+    if st.button("查询", type="primary"):
+        if not search_input.strip():
+            st.warning("请输入手机号或学号")
+            return
+        
+        # 查询逻辑
         search_input = search_input.strip()
         
-        # 尝试匹配手机号或用户ID
-        result = None
-        
-        # 先尝试按手机号匹配（如果是数字）
-        if search_input.isdigit():
-            phone = int(search_input)
-            result = df[df['手机号'] == phone]
-        
-        # 如果没找到，尝试按用户ID匹配
-        if result is None or len(result) == 0:
+        # 尝试匹配手机号（数字）
+        try:
+            phone_search = int(search_input)
+            result = df[df['手机号'] == phone_search]
+        except:
+            # 尝试匹配学号（字符串）
             result = df[df['用户ID'].str.contains(search_input, case=False, na=False)]
         
-        # 显示结果
-        if len(result) > 0:
-            student = result.iloc[0]
+        if len(result) == 0:
+            st.error("未找到相关信息，请检查输入是否正确")
+        else:
+            row = result.iloc[0]
             
-            # 成功提示
-            st.markdown(f'<div class="success-message">✅ 查询成功！欢迎您，<strong>{student["用户昵称"]}</strong></div>', unsafe_allow_html=True)
+            # 显示结果
+            st.success(f"✅ 查询成功！")
+            st.markdown("---")
             
-            # 学生基本信息
-            st.markdown("### 👤 基本信息")
+            # 基本信息
             col1, col2 = st.columns(2)
             with col1:
-                st.info(f"**用户昵称：** {student['用户昵称']}")
-                st.info(f"**用户标签：** {student['用户标签']}")
+                st.metric("姓名", row['用户昵称'])
+                st.metric("班级", row['用户标签'])
             with col2:
-                st.info(f"**手机号：** {student['手机号']}")
-                st.info(f"**练习次数：** {student['练习次数']} 次")
+                st.metric("练习次数", f"{row['练习次数']}次")
+                st.metric("练习时长", row['练习时长'])
             
             st.markdown("---")
             
-            # 练习时长
-            st.markdown("### ⏱️ 练习时长")
-            st.success(f"**累计练习时长：** {student['练习时长']}")
-            
-            st.markdown("---")
-            
-            # 成绩数据
-            st.markdown("### 📈 成绩数据")
-            
-            # 分数展示
+            # 成绩信息
+            st.markdown("### 📈 成绩信息")
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric(
-                    label="最高分数",
-                    value=f"{student['最高分数']}分",
-                    delta=None
-                )
-                # 进度条
-                progress_max = student['最高分数'] / 100
-                st.progress(progress_max)
-            
+                st.metric("最高分", f"{row['最高分数']}分")
             with col2:
-                st.metric(
-                    label="平均分数",
-                    value=f"{student['平均分数']}分",
-                    delta=None
-                )
-                # 进度条
-                progress_avg = student['平均分数'] / 100
-                st.progress(progress_avg)
-            
+                st.metric("平均分", f"{row['平均分数']}分")
             with col3:
-                st.metric(
-                    label="最低分数",
-                    value=f"{student['最低分数']}分",
-                    delta=None
-                )
-                # 进度条
-                progress_min = student['最低分数'] / 100 if student['最低分数'] > 0 else 0
-                st.progress(progress_min)
+                st.metric("最低分", f"{row['最低分数']}分")
             
-            st.markdown("---")
+            # 分数进度条
+            st.markdown("### 📊 成绩可视化")
+            avg_score = row['平均分数']
+            st.progress(avg_score / 100)
+            st.caption(f"平均分占比：{avg_score}%")
             
-            # 成绩评价
-            st.markdown("### 📝 成绩评价")
-            avg_score = student['平均分数']
-            
+            # 评价
             if avg_score >= 90:
-                grade = "优秀 ⭐⭐⭐⭐⭐"
-                color = "green"
-                suggestion = "继续保持！你是大家学习的榜样！"
+                rating = "⭐⭐⭐⭐⭐ 优秀"
             elif avg_score >= 80:
-                grade = "良好 ⭐⭐⭐⭐"
-                color = "blue"
-                suggestion = "进步明显！再接再厉，争取更好成绩！"
+                rating = "⭐⭐⭐⭐ 良好"
             elif avg_score >= 70:
-                grade = "中等 ⭐⭐⭐"
-                color = "orange"
-                suggestion = "基础不错！多加练习，一定会有更大提升！"
+                rating = "⭐⭐⭐ 中等"
             elif avg_score >= 60:
-                grade = "及格 ⭐⭐"
-                color = "yellow"
-                suggestion = "需要加油！多花时间练习，相信你会越来越好！"
+                rating = "⭐⭐ 及格"
             else:
-                grade = "需努力 ⭐"
-                color = "red"
-                suggestion = "不要灰心！坚持练习，一定会有进步！"
+                rating = "⭐ 需努力"
             
-            st.markdown(f"**等级评定：** :{color}[{grade}]")
-            st.info(f"💡 {suggestion}")
-            
-        else:
-            # 未找到记录
-            st.warning("⚠️ 未找到相关记录，请检查输入是否正确")
-            st.markdown("**提示：**")
-            st.markdown("- 请确认输入的手机号或学号是否正确")
-            st.markdown("- 如果仍有问题，请联系老师或管理员")
-    
-    # 页脚信息
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #888; font-size: 0.9rem;">
-        <p>📚 本系统仅供学生查询个人数据使用</p>
-        <p>数据更新时间：2026-04-03</p>
-    </div>
-    """, unsafe_allow_html=True)
+            st.info(f"成绩评价：{rating}")
 
 if __name__ == "__main__":
     main()
